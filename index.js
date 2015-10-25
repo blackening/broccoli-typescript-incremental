@@ -1,9 +1,16 @@
 //This is based heavily off https://github.com/theblacksmith/typescript-require/blob/master/index.js
 
+
+var ts;
+try{
+	ts = require('typescript');
+}catch(e){
+	console.error('Ensure that typescript is installed in the project directory');
+	throw e;
+}
 var _ = require('lodash');
 var Plugin = require('broccoli-plugin');
 var path = require('path');
-var ts = require('typescript');
 var fs = require('fs-extra');
 var glob = require('glob');
 
@@ -31,7 +38,6 @@ BroccoliTSC.prototype.build = function(){
 		this.options.outDir = this.outputPath;
 		console.log('Processing', this.inputPaths);
 		var languageServiceHost = this.languageServiceHost;
-		var generateOutput = this.generateOutput;
 		_.each(this.inputPaths, function(path){
 				var files = glob.sync(path+'/**/*', {nodir: true});
 				_.each(files, function(file){
@@ -41,21 +47,32 @@ BroccoliTSC.prototype.build = function(){
 		console.log('----- Generating files -----')
 		//TODO: Should i clear all non-recent files?
 		_.each(this.inputPaths, function(path){
-			if(util.isDefinitionFile(path))
-				return;
 			var files = glob.sync(path+'/**/*', {nodir: true});
 			_.each(files, function(file){
-				var output = this.generateOutput(file);
-				this.saveOutput(output);
+				if(this.toProcess(file)){
+					console.log('processing', file)
+					var output = this.generateOutput(file);
+					this.saveOutput(output);
+				}
+				else if(this.options.passthrough){
+					console.log('Passthrough:', path);
+					fs.copySync(path, this.outputPath);
+				}
+				else {
+					console.log('Ignoring file:', path);
+				}
 			}, this);
 		}, this);
 		this.serializeLanguageService(this.cachePath);
-		}
 	} catch(e){
 		console.log(e.message);
 		console.log(e.stack);
 		throw e;
 	}
+}
+
+BroccoliTSC.prototype.toProcess = function(path){
+	return path.substr(path.length - 3) == '.ts' && path.substr(path.length - 5) != '.d.ts';
 }
 
 
@@ -117,8 +134,6 @@ BroccoliTSC.prototype.logErrors = function(fileName){
 		}
 	});
 }
-
-
 
 /* Attempts to deserialize a language service, if possible.
 If not, simply creates a new one.
@@ -204,20 +219,12 @@ LanguageServiceHost.prototype.hasChanged = function(filepath){
 		return true;
 	var basepath = path.dirname(filepath);
 	var preprocessed = ts.preProcessFile(fs.readFileSync(filepath).toString(), true);
-	var relative_dependencies = _(preprocessed.referencedFiles).map(file => file.fileName);
+	var relative_dependencies = _(preprocessed.referencedFiles).map(function(file) { return file.fileName });
 	var absolute_dependencies = relative_dependencies
-		.map(r_path => path.resolve(basepath, r_path))
-		.map(abs_path => abs_path.replace(/\\/g,"/"));
+		.map(function(r_path) { return path.resolve(basepath, r_path)})
+		.map(function(abs_path){ return abs_path.replace(/\\/g,"/")});
 	return absolute_dependencies.some(this.hasChanged, this);
 }
 
-//Util functions
-function isDefinitionFile(path){
-	return path.substr(path.length - 5) == '.d.ts';
-}
-
-var util = {
-	isDefinitionFile: isDefinitionFile
-}
 
 module.exports = BroccoliTSC;
