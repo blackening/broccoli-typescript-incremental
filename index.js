@@ -1,6 +1,5 @@
 //This is based heavily off https://github.com/theblacksmith/typescript-require/blob/master/index.js
 
-
 var ts;
 try{
 	ts = require('typescript');
@@ -112,7 +111,7 @@ BroccoliTSC.prototype.generateOutput = function(inputPath){
 BroccoliTSC.prototype.saveOutput = function(output){
 	output.outputFiles.forEach(function(out){
 		console.log('Writing', out.name);
-		fs.writeFileSync(out.name, out.text, "utf8");
+		fs.outputFileSync(out.name, out.text, "utf8");
 	});
 }
 
