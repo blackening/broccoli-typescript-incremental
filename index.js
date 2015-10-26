@@ -47,6 +47,10 @@ BroccoliTSC.prototype.build = function(){
 		console.log('----- Generating files -----')
 		//TODO: Should i clear all non-recent files?
 		_.each(this.inputPaths, function(path){
+			if(this.options.passthrough){
+				console.log('Passthrough:', path);
+				fs.copySync(path, this.outputPath);
+			}
 			var files = glob.sync(path+'/**/*', {nodir: true});
 			_.each(files, function(file){
 				if(this.toProcess(file)){
@@ -54,12 +58,8 @@ BroccoliTSC.prototype.build = function(){
 					var output = this.generateOutput(file);
 					this.saveOutput(output);
 				}
-				else if(this.options.passthrough){
-					console.log('Passthrough:', path);
-					fs.copySync(path, this.outputPath);
-				}
-				else {
-					console.log('Ignoring file:', path);
+				else if(!this.options.passthrough){
+					console.log('Ignoring file:', file);
 				}
 			}, this);
 		}, this);

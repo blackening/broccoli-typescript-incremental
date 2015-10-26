@@ -7,6 +7,7 @@
     * Incidentally, the latter has 17 contributors and has 91 lines of "actual" code.
 * **Passthrough features.** If you want to preserve all files and the folder structure, this will do that.
   * Without passthrough, all non `.ts` files will be ignored.
+  * Note that this is implemented by simply copying the folder first.
 
 # Usage
 First, install broccoli, then typescript.
