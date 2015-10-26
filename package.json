@@ -10,6 +10,10 @@
     "broccoli-plugin",
     "typescript"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blackening/broccoli-typescript-incremental"
+  },
   "author": "",
   "license": "MIT",
   "dependencies": {
