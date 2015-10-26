@@ -213,7 +213,8 @@ LanguageServiceHost.prototype.setCache = function(path, output){
 
 //Assumes no infinite dependency loop.
 LanguageServiceHost.prototype.hasChanged = function(filepath){
-		//TODO: figure out what readImportFiles does. Does it recursive?
+	if(!this.files[filepath])
+		throw new Error("Please check your pathing. Could not find "+filepath+" in cache");
 	if(this.files[filepath].changed)
 		return true;
 	var basepath = path.dirname(filepath);

@@ -24,6 +24,7 @@ Next, create your `brocfile.js`.
       sourceMap: true,
       passthrough: true
       //Any typescript compiler options go here.
+      //See http://json.schemastore.org/tsconfig
     });
 
     module.exports = TypescriptTree;
@@ -37,9 +38,15 @@ For incremental build, use `broccoli-timepiece` instead.
 
 This puts a watch on the folder - rebuilding is done automatically and the cache is used.
 
-# Testing
-There is a test project uploaded in github.com/blackening/broccoli-typescript-incremental-test
+# Limitations
+All files used for compilation must be passed into the broccoli tree for compilation. In particular, take special note of the typescript definitions.
 
+In particular, the "Could not find file in cache" error is related to this.
+
+<!---
+# Testing
+There is a test project uploaded in github.com/blackening/broccoli-typescript-incremental-test. Currently all tests are done by eyeball.
+-->
 
 # Future work
 
