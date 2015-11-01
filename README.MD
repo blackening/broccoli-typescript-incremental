@@ -1,3 +1,5 @@
+Gives broccoli typescript powers. Incrementally.
+
 # Why?
 * **Bring Your Own TypeScript (>= 1.5 supported)**
   * https://github.com/shinnn/broccoli-typescript is two years old. I.e. Typescript 0.9.  
