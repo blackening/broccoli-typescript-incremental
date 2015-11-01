@@ -46,6 +46,7 @@ BroccoliTSC.prototype.build = function(){
 		console.log('----- Generating files -----')
 		//TODO: Should i clear all non-recent files?
 		_.each(this.inputPaths, function(path){
+			this.options.rootDir = path;
 			if(this.options.passthrough){
 				console.log('Passthrough:', path);
 				fs.copySync(path, this.outputPath);
@@ -100,7 +101,7 @@ BroccoliTSC.prototype.generateOutput = function(inputPath){
 		console.log('Emitting', inputPath);
 	}
 	else {
-		console.log('Emitting', inputPath, 'failed');
+		console.log('Emitting failed', inputPath);
 		this.logErrors(inputPath);
 	}
 	//cache the output
