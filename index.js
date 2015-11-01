@@ -12,6 +12,7 @@ var Plugin = require('broccoli-plugin');
 var path = require('path');
 var fs = require('fs-extra');
 var glob = require('glob');
+var colors = require('colors');
 
 
 BroccoliTSC.prototype = Object.create(Plugin.prototype);
@@ -40,9 +41,10 @@ BroccoliTSC.prototype.build = function(){
 		_.each(this.inputPaths, function(path){
 				var files = glob.sync(path+'/**/*', {nodir: true});
 				_.each(files, function(file){
-					languageServiceHost.addFile(file);
-				});
-		});
+					if(file.substr(file.length-3)  == '.ts' || file.substr(file.length-4) == '.tsx')
+						languageServiceHost.addFile(file);
+				}, this);
+		}, this);
 		console.log('----- Generating files -----')
 		//TODO: Should i clear all non-recent files?
 		_.each(this.inputPaths, function(path){
@@ -96,13 +98,16 @@ BroccoliTSC.prototype.deserializeLanguageService = function(path){
 BroccoliTSC.prototype.generateOutput = function(inputPath){
 	if(!this.languageServiceHost.hasChanged(inputPath))
 		return this.languageServiceHost.getCache(inputPath);
+	var diagnostics = this.services.getCompilerOptionsDiagnostics() // global errors, e.g. using the wrong get/set with --target ES3
+            .concat(this.services.getSyntacticDiagnostics(inputPath))  // parse errors, e.g. identifier expected
+            .concat(this.services.getSemanticDiagnostics(inputPath)); // semantic errors e.g. number not assignable to string
 	var output = this.services.getEmitOutput(inputPath);
+	this.logErrors(inputPath);
 	if (!output.emitSkipped) {
 		console.log('Emitting', inputPath);
 	}
 	else {
-		console.log('Emitting failed', inputPath);
-		this.logErrors(inputPath);
+		console.error('Emitting failed', inputPath);
 	}
 	//cache the output
 	this.languageServiceHost.setCache(inputPath, output);
@@ -117,22 +122,23 @@ BroccoliTSC.prototype.saveOutput = function(output){
 }
 
 BroccoliTSC.prototype.logErrors = function(fileName){
-	var allDiagnostics = services.getCompilerOptionsDiagnostics()
-		.concat(services.getSyntacticDiagnostics(fileName))
-		.concat(services.getSemanticDiagnostics(fileName));
-
+	var allDiagnostics = this.services.getCompilerOptionsDiagnostics()
+		.concat(this.services.getSyntacticDiagnostics(fileName))
+		.concat(this.services.getSemanticDiagnostics(fileName));
 	allDiagnostics.forEach(function(diagnostic){
 		var message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 		if (diagnostic.file) {
 			var err = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-			var line = err[0];
-			var character = err[1];
-			console.log(diagnostic.file.filename, line+1, character+1, message);
+			var line = err.line;
+			var character = err.character;
+			var file = path.relative(this.options.rootDir, diagnostic.file.fileName);
+			var errMsg = file+"@"+(line+1)+":"+(character+1)+" - "+message;
+			console.log(errMsg.underline.red);
 		}
 		else {
-			console.log('Error:', message);
+			console.log(('Error: '+message).underline.red);
 		}
-	});
+	}, this);
 }
 
 /* Attempts to deserialize a language service, if possible.
@@ -166,7 +172,7 @@ LanguageServiceHost.prototype.getScriptVersion = function(filename){
 
 
 LanguageServiceHost.prototype.getScriptSnapshot = function(filename){
-	console.log('getting snapshot', filename);
+	//console.log('getting snapshot', filename);
 	if (!fs.existsSync(filename))
 		return undefined;
 	return ts.ScriptSnapshot.fromString(fs.readFileSync(filename).toString());
