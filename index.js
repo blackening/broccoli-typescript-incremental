@@ -13,6 +13,7 @@ var path = require('path');
 var fs = require('fs-extra');
 var glob = require('glob');
 var colors = require('colors');
+var debug = require('debug')('broccoli:typescript');
 
 
 BroccoliTSC.prototype = Object.create(Plugin.prototype);
@@ -32,44 +33,44 @@ this.inputPaths - array of paths on disks corresponding to inputNodes.
 this.outputPath - Path to write to.
 this.cachePath - Cache for me to use.
 */
-BroccoliTSC.prototype.build = function(){
-	try{
-		this.getLanguageService(this.cachePath, this.options);
-		this.options.outDir = this.outputPath;
-		console.log('Processing', this.inputPaths);
-		var languageServiceHost = this.languageServiceHost;
-		_.each(this.inputPaths, function(path){
-				var files = glob.sync(path+'/**/*', {nodir: true});
-				_.each(files, function(file){
-					if(file.substr(file.length-3)  == '.ts' || file.substr(file.length-4) == '.tsx')
-						languageServiceHost.addFile(file);
-				}, this);
-		}, this);
-		console.log('----- Generating files -----')
-		//TODO: Should i clear all non-recent files?
-		_.each(this.inputPaths, function(path){
-			this.options.rootDir = path;
-			if(this.options.passthrough){
-				console.log('Passthrough:', path);
-				fs.copySync(path, this.outputPath);
-			}
+BroccoliTSC.prototype.build = function() {
+	this.hardFailed = this.softFailed = false;
+
+	this.getLanguageService(this.cachePath, this.options);
+	this.options.outDir = this.outputPath;
+	debug('Processing', this.inputPaths);
+	var languageServiceHost = this.languageServiceHost;
+	_.each(this.inputPaths, function(path){
 			var files = glob.sync(path+'/**/*', {nodir: true});
 			_.each(files, function(file){
-				if(this.toProcess(file)){
-					console.log('processing', file)
-					var output = this.generateOutput(file);
-					this.saveOutput(output);
-				}
-				else if(!this.options.passthrough){
-					console.log('Ignoring file:', file);
-				}
+				if(file.substr(file.length-3)  == '.ts' || file.substr(file.length-4) == '.tsx')
+					languageServiceHost.addFile(file);
 			}, this);
+	}, this);
+	debug('----- Generating files -----')
+	//TODO: Should i clear all non-recent files?
+	_.each(this.inputPaths, function(path){
+		this.options.rootDir = path;
+		if(this.options.passthrough){
+			debug('Passthrough:', path);
+			fs.copySync(path, this.outputPath);
+		}
+		var files = glob.sync(path+'/**/*', {nodir: true});
+		_.each(files, function(file){
+			if(this.toProcess(file)){
+				debug('processing', file)
+				var output = this.generateOutput(file);
+				this.saveOutput(output);
+			}
+			else if(!this.options.passthrough){
+				debug('Ignoring file:', file);
+			}
 		}, this);
-		this.serializeLanguageService(this.cachePath);
-	} catch(e){
-		console.log(e.message);
-		console.log(e.stack);
-		throw e;
+	}, this);
+	this.serializeLanguageService(this.cachePath);
+
+	if(this.hardFailed || (this.softFailed && this.options.failOnSemanticErrors)) {
+		throw new Error("There were problems during typescript compilation, see the console for full output.");
 	}
 }
 
@@ -81,7 +82,7 @@ BroccoliTSC.prototype.toProcess = function(path){
 BroccoliTSC.prototype.serializeLanguageService = function(path){
 	var files = this.languageServiceHost.files;
 	fs.writeFileSync(this.cachePath+'/files.json', JSON.stringify(files));
-	console.log('Caching to:', this.cachePath+'/files.json');
+	debug('Caching to:', this.cachePath+'/files.json');
 }
 
 BroccoliTSC.prototype.deserializeLanguageService = function(path){
@@ -90,7 +91,7 @@ BroccoliTSC.prototype.deserializeLanguageService = function(path){
 	var restored_files = JSON.parse(fs.readFileSync(this.cachePath+'/files.json')) || {};
 	_.each(restored_files, function(file, path){
 		file.changed = false;
-		console.log(path, file);
+		debug(path, file);
 		this.languageServiceHost.files[path] = file;
 	}, this);
 }
@@ -98,13 +99,11 @@ BroccoliTSC.prototype.deserializeLanguageService = function(path){
 BroccoliTSC.prototype.generateOutput = function(inputPath){
 	if(!this.languageServiceHost.hasChanged(inputPath))
 		return this.languageServiceHost.getCache(inputPath);
-	var diagnostics = this.services.getCompilerOptionsDiagnostics() // global errors, e.g. using the wrong get/set with --target ES3
-            .concat(this.services.getSyntacticDiagnostics(inputPath))  // parse errors, e.g. identifier expected
-            .concat(this.services.getSemanticDiagnostics(inputPath)); // semantic errors e.g. number not assignable to string
+
 	var output = this.services.getEmitOutput(inputPath);
 	this.logErrors(inputPath);
 	if (!output.emitSkipped) {
-		console.log('Emitting', inputPath);
+		debug('Emitting', inputPath);
 	}
 	else {
 		console.error('Emitting failed', inputPath);
@@ -116,16 +115,21 @@ BroccoliTSC.prototype.generateOutput = function(inputPath){
 
 BroccoliTSC.prototype.saveOutput = function(output){
 	output.outputFiles.forEach(function(out){
-		console.log('Writing', out.name);
+		debug('Writing', out.name);
 		fs.outputFileSync(out.name, out.text, "utf8");
 	});
 }
 
 BroccoliTSC.prototype.logErrors = function(fileName){
-	var allDiagnostics = this.services.getCompilerOptionsDiagnostics()
-		.concat(this.services.getSyntacticDiagnostics(fileName))
-		.concat(this.services.getSemanticDiagnostics(fileName));
-	allDiagnostics.forEach(function(diagnostic){
+	var implacableErrors = this.services.getCompilerOptionsDiagnostics() // global errors, e.g. using the wrong get/set with --target ES3
+		.concat(this.services.getSyntacticDiagnostics(fileName)); // parse errors, e.g. identifier expected
+	var semanticErrors = this.services.getSemanticDiagnostics(fileName); // semantic errors e.g. number not assignable to string
+	var allDiagnostics = [].concat(implacableErrors, semanticErrors);
+
+	this.hardFailed = this.hardFailed || implacableErrors.length;
+	this.softFailed = this.softFailed || this.hardFailed || !!semanticErrors.length;
+
+	allDiagnostics.forEach(function(diagnostic) {
 		var message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 		if (diagnostic.file) {
 			var err = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
@@ -133,10 +137,10 @@ BroccoliTSC.prototype.logErrors = function(fileName){
 			var character = err.character;
 			var file = path.relative(this.options.rootDir, diagnostic.file.fileName);
 			var errMsg = file+"@"+(line+1)+":"+(character+1)+" - "+message;
-			console.log(errMsg.underline.red);
+			console.warn(errMsg.underline.red);
 		}
 		else {
-			console.log(('Error: '+message).underline.red);
+			console.warn(('Error: '+message).underline.red);
 		}
 	}, this);
 }
