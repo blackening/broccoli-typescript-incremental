@@ -198,7 +198,6 @@ LanguageServiceHost.prototype.getDefaultLibFileName = function(options){
 LanguageServiceHost.prototype.addFile = function(path){
 	var last_modified = fs.statSync(path).mtime.toJSON();
 	if(this.files[path]){
-		console.log(this.files[path].last_modified, last_modified);
 		if(this.files[path].last_modified != last_modified){
 			this.files[path].version += 1;
 			this.files[path].last_modified = last_modified;
